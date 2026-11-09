@@ -152,12 +152,54 @@ jobs:
             ../blender_build_android/lib/vulkan_headers/
 
       - name: Build Lite APK
+        id: blender_build
+        continue-on-error: true
         run: |
           set -euo pipefail
 
           python3 build_files/android/build.py lite
 
+      - name: Diagnose failed build
+        if: steps.blender_build.outcome == 'failure'
+        run: |
+          echo "========== CMAKE LOG FILES =========="
+
+          find ../blender_build_android \
+            -type f \( \
+              -name "CMakeError.log" -o \
+              -name "CMakeOutput.log" -o \
+              -name "CMakeConfigureLog.yaml" \
+            \) -print 2>/dev/null || true
+
+          echo "========== CMAKE ERROR DETAILS =========="
+
+          find ../blender_build_android \
+            -type f \( \
+              -name "CMakeError.log" -o \
+              -name "CMakeConfigureLog.yaml" \
+            \) -exec sh -c '
+              echo "========== $1 =========="
+              tail -n 200 "$1"
+            ' _ {} \; 2>/dev/null || true
+
+          echo "========== SEARCHING BUILD LOGS =========="
+
+          find ../blender_build_android \
+            -type f \( -name "*.log" -o -name "build.ninja" \) \
+            -exec grep -inE \
+              "CMake Error|Could NOT find|not found|failed|error:" {} + \
+            2>/dev/null | tail -n 200 || true
+
+          echo "========== DIAGNOSTICS COMPLETE =========="
+
+      - name: Fail workflow if Blender build failed
+        if: steps.blender_build.outcome == 'failure'
+        run: |
+          echo "Blender Android Lite build failed."
+          exit 1
+
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ReyCreate-Blender-Touch-Lite-ARM64
