@@ -25,7 +25,7 @@ jobs:
           submodules: false
 
       # ==========================================
-      # 2. INSTALL BUILD DEPENDENCIES
+      # 2. INSTALL DEPENDENCIES
       # ==========================================
 
       - name: Install dependencies
@@ -59,7 +59,7 @@ jobs:
           packages: ''
 
       # ==========================================
-      # 5. INSTALL ANDROID SDK + NDK
+      # 5. INSTALL ANDROID SDK AND NDK
       # ==========================================
 
       - name: Install Android SDK and NDK
@@ -70,7 +70,6 @@ jobs:
 
           echo "Android SDK location: $SDK_ROOT"
 
-          echo "Checking SDK Manager..."
           which sdkmanager
           sdkmanager --version
 
@@ -79,7 +78,7 @@ jobs:
           echo "Accepting Android SDK licenses..."
           sdkmanager --sdk_root="$SDK_ROOT" --licenses
 
-          echo "Checking existing Platform-Tools..."
+          echo "Checking Platform-Tools..."
 
           if [ -d "$SDK_ROOT/platform-tools" ]; then
             ls -la "$SDK_ROOT/platform-tools"
@@ -87,7 +86,7 @@ jobs:
             echo "Platform-Tools directory not found."
           fi
 
-          echo "Installing Android platform, build tools and NDK..."
+          echo "Installing Android platform and NDK..."
 
           sdkmanager --sdk_root="$SDK_ROOT" --verbose --channel=3 \
             "platforms;android-35" \
@@ -97,14 +96,11 @@ jobs:
           echo "Checking installed packages..."
           sdkmanager --sdk_root="$SDK_ROOT" --list_installed
 
-          echo "Checking NDK directory..."
-          ls -la "$SDK_ROOT/ndk"
-
-          echo "Verifying NDK toolchain..."
+          echo "Checking NDK..."
 
           test -f "$SDK_ROOT/ndk/30.0.14904198/build/cmake/android.toolchain.cmake"
 
-          echo "Creating Blender NDK compatibility path..."
+          echo "Creating NDK compatibility path..."
 
           ln -sfn "$SDK_ROOT/ndk/30.0.14904198" \
             "$SDK_ROOT/ndk/30.0.14904198-beta1"
@@ -119,7 +115,7 @@ jobs:
           echo "ANDROID_HOME=$HOME/android-sdk" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> "$GITHUB_ENV"
 
-          echo "Android SDK and NDK checks completed."
+          echo "Android SDK setup completed."
 
       # ==========================================
       # 6. VERIFY BUILD TOOLS
@@ -140,11 +136,10 @@ jobs:
           gcc-14 --version
           g++-14 --version
 
-          echo "Checking Android toolchain..."
-
+          echo "Checking Android NDK..."
           test -f "$HOME/android-sdk/ndk/30.0.14904198-beta1/build/cmake/android.toolchain.cmake"
 
-          echo "All build tool checks passed."
+          echo "All build tools verified."
 
       # ==========================================
       # 7. CONFIGURE GIT LFS
@@ -174,7 +169,10 @@ jobs:
               submodule update --init \
               lib/linux_x64 lib/android_arm64
 
+          echo "Downloading host libraries..."
           git -C lib/linux_x64 lfs pull
+
+          echo "Downloading Android ARM64 libraries..."
           git -C lib/android_arm64 lfs pull
 
       # ==========================================
@@ -194,45 +192,62 @@ jobs:
           cp -a "$RUNNER_TEMP/Vulkan-Headers/include" \
             ../blender_build_android/lib/vulkan_headers/
 
+          echo "Vulkan headers installed."
+
       # ==========================================
-      # 10. BUILD BLENDER AND SAVE FULL LOG
+      # 10. CLEAN AND REBUILD BLENDER LITE
       # ==========================================
 
-      - name: Build Lite APK
+      - name: Clean and Build Lite APK
         id: blender_build
         continue-on-error: true
         run: |
           set -o pipefail
 
-          echo "Starting Blender Android ARM64 Lite build..."
+          echo "=========================================="
+          echo "REYCREATE BLENDER ANDROID CLEAN BUILD"
+          echo "=========================================="
 
-          python3 build_files/android/build.py lite 2>&1 | tee "$RUNNER_TEMP/blender-build.log"
+          echo "Configuration: Lite"
+          echo "Architecture: ARM64"
+          echo "Build mode: Clean"
+
+          python3 build_files/android/build.py lite --clean 2>&1 | tee "$RUNNER_TEMP/blender-build.log"
 
       # ==========================================
-      # 11. DIAGNOSE FAILED BUILD
+      # 11. DIAGNOSE BUILD FAILURE
       # ==========================================
 
       - name: Diagnose failed build
         if: steps.blender_build.outcome == 'failure'
         run: |
-          echo "========== ORIGINAL BUILD ERRORS =========="
+          echo "=========================================="
+          echo "ORIGINAL BUILD ERROR DETAILS"
+          echo "=========================================="
 
           if [ -f "$RUNNER_TEMP/blender-build.log" ]; then
+
+            echo "Searching for CMake and compiler errors..."
 
             grep -in -B 20 -A 35 -E \
               "CMake Error|Could NOT find|not found|FAILED:|error:|fatal error|Generate step failed|subcommand failed" \
               "$RUNNER_TEMP/blender-build.log" | tail -n 300 || true
 
-            echo "========== LAST 250 BUILD LINES =========="
+            echo "=========================================="
+            echo "LAST 250 BUILD LOG LINES"
+            echo "=========================================="
 
             tail -n 250 "$RUNNER_TEMP/blender-build.log"
 
           fi
 
-          echo "========== CMAKE ERROR LOGS =========="
+          echo "=========================================="
+          echo "CMAKE ERROR LOGS"
+          echo "=========================================="
 
           find .. -type f \( \
             -name "CMakeError.log" -o \
+            -name "CMakeOutput.log" -o \
             -name "CMakeConfigureLog.yaml" \
           \) -print 2>/dev/null || true
 
@@ -244,7 +259,9 @@ jobs:
             tail -n 150 "$1"
           ' _ {} \; 2>/dev/null || true
 
-          echo "========== DIAGNOSTICS COMPLETE =========="
+          echo "=========================================="
+          echo "DIAGNOSTICS COMPLETE"
+          echo "=========================================="
 
       # ==========================================
       # 12. PRESERVE FAILED BUILD STATUS
