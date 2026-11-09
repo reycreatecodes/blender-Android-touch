@@ -14,15 +14,24 @@ jobs:
     timeout-minutes: 360
 
     steps:
+      # ==========================================
+      # 1. CHECKOUT SOURCE
+      # ==========================================
+
       - name: Checkout source
         uses: actions/checkout@v4
         with:
           lfs: false
           submodules: false
 
+      # ==========================================
+      # 2. INSTALL BUILD DEPENDENCIES
+      # ==========================================
+
       - name: Install dependencies
         run: |
           sudo apt-get update
+
           sudo apt-get install -y \
             build-essential gcc-14 g++-14 \
             cmake ninja-build git-lfs patchelf \
@@ -30,16 +39,28 @@ jobs:
             python3-pip openjdk-17-jdk pkg-config \
             libxi-dev
 
+      # ==========================================
+      # 3. JAVA SETUP
+      # ==========================================
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
+      # ==========================================
+      # 4. ANDROID SDK SETUP
+      # ==========================================
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: ''
+
+      # ==========================================
+      # 5. INSTALL ANDROID SDK + NDK
+      # ==========================================
 
       - name: Install Android SDK and NDK
         run: |
@@ -59,6 +80,7 @@ jobs:
           sdkmanager --sdk_root="$SDK_ROOT" --licenses
 
           echo "Checking existing Platform-Tools..."
+
           if [ -d "$SDK_ROOT/platform-tools" ]; then
             ls -la "$SDK_ROOT/platform-tools"
           else
@@ -66,6 +88,7 @@ jobs:
           fi
 
           echo "Installing Android platform, build tools and NDK..."
+
           sdkmanager --sdk_root="$SDK_ROOT" --verbose --channel=3 \
             "platforms;android-35" \
             "build-tools;35.0.1" \
@@ -78,15 +101,18 @@ jobs:
           ls -la "$SDK_ROOT/ndk"
 
           echo "Verifying NDK toolchain..."
+
           test -f "$SDK_ROOT/ndk/30.0.14904198/build/cmake/android.toolchain.cmake"
 
           echo "Creating Blender NDK compatibility path..."
+
           ln -sfn "$SDK_ROOT/ndk/30.0.14904198" \
             "$SDK_ROOT/ndk/30.0.14904198-beta1"
 
           test -f "$SDK_ROOT/ndk/30.0.14904198-beta1/build/cmake/android.toolchain.cmake"
 
           echo "Preparing Blender SDK path..."
+
           rm -rf "$HOME/android-sdk"
           ln -s "$SDK_ROOT" "$HOME/android-sdk"
 
@@ -94,6 +120,10 @@ jobs:
           echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> "$GITHUB_ENV"
 
           echo "Android SDK and NDK checks completed."
+
+      # ==========================================
+      # 6. VERIFY BUILD TOOLS
+      # ==========================================
 
       - name: Verify build tools
         run: |
@@ -111,9 +141,14 @@ jobs:
           g++-14 --version
 
           echo "Checking Android toolchain..."
+
           test -f "$HOME/android-sdk/ndk/30.0.14904198-beta1/build/cmake/android.toolchain.cmake"
 
           echo "All build tool checks passed."
+
+      # ==========================================
+      # 7. CONFIGURE GIT LFS
+      # ==========================================
 
       - name: Configure Git LFS
         run: |
@@ -126,6 +161,10 @@ jobs:
 
           git lfs pull
 
+      # ==========================================
+      # 8. INITIALIZE REQUIRED SUBMODULES
+      # ==========================================
+
       - name: Initialize required submodules
         run: |
           set -euo pipefail
@@ -137,6 +176,10 @@ jobs:
 
           git -C lib/linux_x64 lfs pull
           git -C lib/android_arm64 lfs pull
+
+      # ==========================================
+      # 9. INSTALL VULKAN HEADERS
+      # ==========================================
 
       - name: Install Vulkan headers
         run: |
@@ -151,52 +194,71 @@ jobs:
           cp -a "$RUNNER_TEMP/Vulkan-Headers/include" \
             ../blender_build_android/lib/vulkan_headers/
 
+      # ==========================================
+      # 10. BUILD BLENDER AND SAVE FULL LOG
+      # ==========================================
+
       - name: Build Lite APK
         id: blender_build
         continue-on-error: true
         run: |
-          set -euo pipefail
+          set -o pipefail
 
-          python3 build_files/android/build.py lite
+          echo "Starting Blender Android ARM64 Lite build..."
+
+          python3 build_files/android/build.py lite 2>&1 | tee "$RUNNER_TEMP/blender-build.log"
+
+      # ==========================================
+      # 11. DIAGNOSE FAILED BUILD
+      # ==========================================
 
       - name: Diagnose failed build
         if: steps.blender_build.outcome == 'failure'
         run: |
-          echo "========== CMAKE LOG FILES =========="
+          echo "========== ORIGINAL BUILD ERRORS =========="
 
-          find ../blender_build_android \
-            -type f \( \
-              -name "CMakeError.log" -o \
-              -name "CMakeOutput.log" -o \
-              -name "CMakeConfigureLog.yaml" \
-            \) -print 2>/dev/null || true
+          if [ -f "$RUNNER_TEMP/blender-build.log" ]; then
 
-          echo "========== CMAKE ERROR DETAILS =========="
+            grep -in -B 20 -A 35 -E \
+              "CMake Error|Could NOT find|not found|FAILED:|error:|fatal error|Generate step failed|subcommand failed" \
+              "$RUNNER_TEMP/blender-build.log" | tail -n 300 || true
 
-          find ../blender_build_android \
-            -type f \( \
-              -name "CMakeError.log" -o \
-              -name "CMakeConfigureLog.yaml" \
-            \) -exec sh -c '
-              echo "========== $1 =========="
-              tail -n 200 "$1"
-            ' _ {} \; 2>/dev/null || true
+            echo "========== LAST 250 BUILD LINES =========="
 
-          echo "========== SEARCHING BUILD LOGS =========="
+            tail -n 250 "$RUNNER_TEMP/blender-build.log"
 
-          find ../blender_build_android \
-            -type f \( -name "*.log" -o -name "build.ninja" \) \
-            -exec grep -inE \
-              "CMake Error|Could NOT find|not found|failed|error:" {} + \
-            2>/dev/null | tail -n 200 || true
+          fi
+
+          echo "========== CMAKE ERROR LOGS =========="
+
+          find .. -type f \( \
+            -name "CMakeError.log" -o \
+            -name "CMakeConfigureLog.yaml" \
+          \) -print 2>/dev/null || true
+
+          find .. -type f \( \
+            -name "CMakeError.log" -o \
+            -name "CMakeConfigureLog.yaml" \
+          \) -exec sh -c '
+            echo "========== $1 =========="
+            tail -n 150 "$1"
+          ' _ {} \; 2>/dev/null || true
 
           echo "========== DIAGNOSTICS COMPLETE =========="
+
+      # ==========================================
+      # 12. PRESERVE FAILED BUILD STATUS
+      # ==========================================
 
       - name: Fail workflow if Blender build failed
         if: steps.blender_build.outcome == 'failure'
         run: |
           echo "Blender Android Lite build failed."
           exit 1
+
+      # ==========================================
+      # 13. UPLOAD APK
+      # ==========================================
 
       - name: Upload APK
         if: success()
