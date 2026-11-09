@@ -44,42 +44,40 @@ jobs:
         run: |
           set -euo pipefail
 
-          export ANDROID_HOME="$HOME/android-sdk"
-          export ANDROID_SDK_ROOT="$ANDROID_HOME"
-          mkdir -p "$ANDROID_HOME"
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
 
-          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
-
+          echo "Using Android SDK: $SDK_ROOT"
           echo "Checking SDK Manager..."
           which sdkmanager
           sdkmanager --version
 
           echo "Accepting Android SDK licenses..."
-          sdkmanager --sdk_root="$ANDROID_HOME" --licenses
+          sdkmanager --sdk_root="$SDK_ROOT" --licenses
 
           echo "Installing Android packages..."
-          sdkmanager --sdk_root="$ANDROID_HOME" --verbose --channel=3 \
+          sdkmanager --sdk_root="$SDK_ROOT" --verbose --channel=3 \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.1" \
             "ndk;30.0.14904198"
 
-          echo "Checking installed SDK packages..."
-          sdkmanager --sdk_root="$ANDROID_HOME" --list_installed
-
-          echo "Checking SDK directory..."
-          ls -la "$ANDROID_HOME"
+          echo "Checking installed packages..."
+          sdkmanager --sdk_root="$SDK_ROOT" --list_installed
 
           echo "Checking NDK directory..."
-          ls -la "$ANDROID_HOME/ndk"
+          ls -la "$SDK_ROOT/ndk"
 
-          echo "Checking NDK installation..."
-          test -f "$ANDROID_HOME/ndk/30.0.14904198/build/cmake/android.toolchain.cmake"
+          echo "Verifying NDK toolchain..."
+          test -f "$SDK_ROOT/ndk/30.0.14904198/build/cmake/android.toolchain.cmake"
 
-          echo "Creating expected NDK path..."
-          ln -sfn "$ANDROID_HOME/ndk/30.0.14904198" \
-            "$ANDROID_HOME/ndk/30.0.14904198-beta1"
+          echo "Preparing Blender SDK path..."
+          rm -rf "$HOME/android-sdk"
+          ln -s "$SDK_ROOT" "$HOME/android-sdk"
+
+          echo "ANDROID_HOME=$HOME/android-sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> "$GITHUB_ENV"
+
+          echo "Android SDK and NDK installation verified."
 
       - name: Configure Git LFS
         run: |
