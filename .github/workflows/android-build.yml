@@ -1,3 +1,4 @@
+
 name: ReyCreate Blender Touch Android Build
 
 on:
@@ -46,6 +47,7 @@ jobs:
           SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
 
           echo "Android SDK location: $SDK_ROOT"
+
           echo "Checking SDK Manager..."
           which sdkmanager
           sdkmanager --version
@@ -59,7 +61,7 @@ jobs:
           if [ -d "$SDK_ROOT/platform-tools" ]; then
             ls -la "$SDK_ROOT/platform-tools"
           else
-            echo "Platform-Tools directory not found; skipping it."
+            echo "Platform-Tools directory not found."
           fi
 
           echo "Installing Android platform, build tools and NDK..."
@@ -71,14 +73,17 @@ jobs:
           echo "Checking installed packages..."
           sdkmanager --sdk_root="$SDK_ROOT" --list_installed
 
-          echo "Checking SDK directory..."
-          ls -la "$SDK_ROOT"
-
           echo "Checking NDK directory..."
           ls -la "$SDK_ROOT/ndk"
 
           echo "Verifying NDK toolchain..."
           test -f "$SDK_ROOT/ndk/30.0.14904198/build/cmake/android.toolchain.cmake"
+
+          echo "Creating Blender NDK compatibility path..."
+          ln -sfn "$SDK_ROOT/ndk/30.0.14904198" \
+            "$SDK_ROOT/ndk/30.0.14904198-beta1"
+
+          test -f "$SDK_ROOT/ndk/30.0.14904198-beta1/build/cmake/android.toolchain.cmake"
 
           echo "Preparing Blender SDK path..."
           rm -rf "$HOME/android-sdk"
@@ -89,15 +94,41 @@ jobs:
 
           echo "Android SDK and NDK checks completed."
 
+      - name: Verify build tools
+        run: |
+          set -euo pipefail
+
+          echo "Checking Ninja..."
+          command -v ninja
+          ninja --version
+
+          echo "Checking CMake..."
+          cmake --version
+
+          echo "Checking GCC..."
+          gcc-14 --version
+          g++-14 --version
+
+          echo "Checking Android toolchain..."
+          test -f "$HOME/android-sdk/ndk/30.0.14904198-beta1/build/cmake/android.toolchain.cmake"
+
+          echo "All build tool checks passed."
+
       - name: Configure Git LFS
         run: |
+          set -euo pipefail
+
           git lfs install
+
           git config --local lfs.url \
             https://projects.blender.org/blender/blender.git/info/lfs
+
           git lfs pull
 
       - name: Initialize required submodules
         run: |
+          set -euo pipefail
+
           git -c submodule.lib/linux_x64.update=checkout \
               -c submodule.lib/android_arm64.update=checkout \
               submodule update --init \
@@ -108,16 +139,21 @@ jobs:
 
       - name: Install Vulkan headers
         run: |
+          set -euo pipefail
+
           git clone --depth 1 --branch v1.4.341 \
             https://github.com/KhronosGroup/Vulkan-Headers.git \
             "$RUNNER_TEMP/Vulkan-Headers"
 
           mkdir -p ../blender_build_android/lib/vulkan_headers
+
           cp -a "$RUNNER_TEMP/Vulkan-Headers/include" \
             ../blender_build_android/lib/vulkan_headers/
 
       - name: Build Lite APK
         run: |
+          set -euo pipefail
+
           python3 build_files/android/build.py lite
 
       - name: Upload APK
