@@ -1,0 +1,86 @@
+name: ReyCreate Blender Touch Android Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Galaxy Tab S9 ARM64 Lite
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          submodules: false
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential gcc-14 g++-14 \
+            cmake ninja-build git-lfs patchelf \
+            zip unzip bison flex python3 \
+            python3-pip openjdk-17-jdk pkg-config
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK and NDK
+        run: |
+          export ANDROID_HOME="$HOME/android-sdk"
+          mkdir -p "$ANDROID_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses
+          sdkmanager --sdk_root="$ANDROID_HOME" --channel=3 \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.1" \
+            "ndk;30.0.14904198-beta1"
+
+      - name: Configure Git LFS
+        run: |
+          git lfs install
+          git config --local lfs.url \
+            https://projects.blender.org/blender/blender.git/info/lfs
+          git lfs pull
+
+      - name: Initialize required submodules
+        run: |
+          git -c submodule.lib/linux_x64.update=checkout \
+              -c submodule.lib/android_arm64.update=checkout \
+              submodule update --init \
+              lib/linux_x64 lib/android_arm64
+
+          git -C lib/linux_x64 lfs pull
+          git -C lib/android_arm64 lfs pull
+
+      - name: Install Vulkan headers
+        run: |
+          git clone --depth 1 --branch v1.4.341 \
+            https://github.com/KhronosGroup/Vulkan-Headers.git \
+            "$RUNNER_TEMP/Vulkan-Headers"
+
+          mkdir -p ../blender_build_android/lib/vulkan_headers
+          cp -a "$RUNNER_TEMP/Vulkan-Headers/include" \
+            ../blender_build_android/lib/vulkan_headers/
+
+      - name: Build Lite APK
+        run: |
+          python3 build_files/android/build.py lite
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReyCreate-Blender-Touch-Lite-ARM64
+          path: ../blender_build_android/android_apk_stage_lite/blender-lite.apk
+          if-no-files-found: error
+          retention-days: 14
