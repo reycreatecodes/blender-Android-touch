@@ -1,4 +1,4 @@
-
+p
 name: ReyCreate Blender Touch Android Build
 
 on:
@@ -52,7 +52,7 @@ jobs:
           sdkmanager --version
 
           echo "Accepting licenses..."
-          yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses
+          sdkmanager --sdk_root="$ANDROID_HOME" --licenses
 
           echo "Installing Android packages..."
           sdkmanager --sdk_root="$ANDROID_HOME" --verbose --channel=3 \
