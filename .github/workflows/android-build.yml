@@ -1,3 +1,4 @@
+
 name: ReyCreate Blender Touch Android Build
 
 on:
@@ -42,15 +43,19 @@ jobs:
       - name: Install Android SDK and NDK
         run: |
           set -euo pipefail
-          export ANDROID_HOME="$HOME/android-sdk"
-          mkdir -p "$ANDROID_HOME"
-          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
 
-                    echo "Checking SDK Manager..."
+          export ANDROID_HOME="$HOME/android-sdk"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          mkdir -p "$ANDROID_HOME"
+
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+
+          echo "Checking SDK Manager..."
           which sdkmanager
           sdkmanager --version
 
-          echo "Accepting licenses..."
+          echo "Accepting Android SDK licenses..."
           sdkmanager --sdk_root="$ANDROID_HOME" --licenses
 
           echo "Installing Android packages..."
@@ -60,8 +65,21 @@ jobs:
             "build-tools;35.0.1" \
             "ndk;30.0.14904198"
 
-          echo "Checking NDK..."
-          ls -la "$ANDROID_HOME/ndk/"
+          echo "Checking installed SDK packages..."
+          sdkmanager --sdk_root="$ANDROID_HOME" --list_installed
+
+          echo "Checking SDK directory..."
+          ls -la "$ANDROID_HOME"
+
+          echo "Checking NDK directory..."
+          ls -la "$ANDROID_HOME/ndk"
+
+          echo "Checking NDK installation..."
+          test -f "$ANDROID_HOME/ndk/30.0.14904198/build/cmake/android.toolchain.cmake"
+
+          echo "Creating expected NDK path..."
+          ln -sfn "$ANDROID_HOME/ndk/30.0.14904198" \
+            "$ANDROID_HOME/ndk/30.0.14904198-beta1"
 
       - name: Configure Git LFS
         run: |
