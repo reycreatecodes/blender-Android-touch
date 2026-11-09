@@ -1,3 +1,4 @@
+
 name: ReyCreate Blender Touch Android Build
 
 on:
@@ -39,8 +40,9 @@ jobs:
         with:
           packages: platform-tools
 
-            - name: Install Android SDK and NDK
+      - name: Install Android SDK and NDK
         run: |
+          set -euo pipefail
           export ANDROID_HOME="$HOME/android-sdk"
           mkdir -p "$ANDROID_HOME"
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
