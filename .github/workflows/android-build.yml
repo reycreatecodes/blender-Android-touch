@@ -39,17 +39,24 @@ jobs:
         with:
           packages: platform-tools
 
-      - name: Install Android SDK and NDK
+            - name: Install Android SDK and NDK
         run: |
           export ANDROID_HOME="$HOME/android-sdk"
           mkdir -p "$ANDROID_HOME"
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+
           yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses
+
           sdkmanager --sdk_root="$ANDROID_HOME" --channel=3 \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.1" \
-            "ndk;30.0.14904198-beta1"
+            "ndk;30.0.14904198"
+
+          ln -sfn "$ANDROID_HOME/ndk/30.0.14904198" \
+            "$ANDROID_HOME/ndk/30.0.14904198-beta1"
+
+          test -f "$ANDROID_HOME/ndk/30.0.14904198-beta1/build/cmake/android.toolchain.cmake"
 
       - name: Configure Git LFS
         run: |
