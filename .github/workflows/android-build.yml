@@ -38,18 +38,20 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: platform-tools
+          packages: ''
 
       - name: Install Android SDK and NDK
         run: |
           set -euo pipefail
 
-          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
 
-          echo "Using Android SDK: $SDK_ROOT"
+          echo "Android SDK location: $SDK_ROOT"
           echo "Checking SDK Manager..."
           which sdkmanager
           sdkmanager --version
+
+          mkdir -p "$SDK_ROOT"
 
           echo "Accepting Android SDK licenses..."
           sdkmanager --sdk_root="$SDK_ROOT" --licenses
@@ -63,6 +65,9 @@ jobs:
 
           echo "Checking installed packages..."
           sdkmanager --sdk_root="$SDK_ROOT" --list_installed
+
+          echo "Checking SDK directory..."
+          ls -la "$SDK_ROOT"
 
           echo "Checking NDK directory..."
           ls -la "$SDK_ROOT/ndk"
